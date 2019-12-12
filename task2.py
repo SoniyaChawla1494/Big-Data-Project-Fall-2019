@@ -302,7 +302,7 @@ def semantic_profiling(directory_path, process_start_time, datasets_to_run):
     files = files[1:]
     print('files success')
 
-    with open('cluster3.txt', 'r') as f:
+    with open('cluster1.txt', 'r') as f:
         x = f.readlines()
 
     l = x[0].strip('[').strip('\n').strip(']').split(',')
