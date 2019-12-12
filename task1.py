@@ -1,308 +1,416 @@
+import os
+import sys
+from pyspark import SparkContext
 from pyspark.sql import SparkSession
-from collections import Counter
 import pyspark.sql.functions as F
-import operator
+from pyspark.sql.window import Window
+from csv import reader
+import time
 import json
 import subprocess
-import sys
-import time
 
-spark = SparkSession.builder.appName("general_profiling_task1").config('spark.driver.memory', '12g').config('spark.resultant_dfecutor.cores', 4).config('spark.resultant_dfecutor.memory', '12g').getOrCreate()
-def general_profiling_task1(path_to_folder, process_start_time, dataset_count):
+spark = SparkSession.builder.appName("generic_profiling").config('spark.driver.memory', '10g').config('spark.executor.cores', 5).config('spark.executor.memory', '10g').getOrCreate()
 
-    def column_labels_list():
-        root_tags = ['count_non_empty_cells', 'count_empty_cells', 'count_distint_cells', 'get_frequent_value_count']
-        int_tags = ['count_int_values', 'count_int_max_values', 'count_int_min_values', 'calculate_int_mean','calculate_int_stddev']
-        real_tags = ['count_real_longest_values', 'count_real_max_values', 'count_real_min_values','calculate_real_mean', 'calculate_real_stddev']
-        date_tags = ['count_date_values', 'count_date_max_values', 'count_date_min_values']
-        str_tags = ['count_string_values', 'count_string_shortest_values', 'string_longest_values','calculate_string_avg']
-        return root_tags,int_tags,real_tags,date_tags,str_tags
 
-    def statistics_root(df):
-        label_int = 'integer'
-        label_double = 'double'
-        label_string = 'string'
-        date_format = 'MM/dd/yyyy'
-        max_value = 500000
 
-        def preprocess_column(column,type):
-            return column.cast(type)
+def generic_profiling(path, start_time, n):  #function that performs generic profiling.
 
-        def count_non_empty_cells(col):
+
+    def stat1(df):                                  
+        
+        def number_non_empty_cells(col):           
             return F.count(col)
 
-        def count_empty_cells(col):
+        def number_empty_cells(col):                   
             return F.count(F.when(F.isnull(col), col))
 
-        def count_distint_cells(col):
+        def number_distinct_values(col):                
             return F.approxCountDistinct(col)
 
-        def compute_frequents(data):
-            if len(data) < 0:
-                return None
-            else:
-                count_values = Counter(data).most_common(5)
-                frequents = [w[0] for w in count_values]
-                return frequents
-            
-        def get_frequent_value_count(col):
-            return compute_frequents(F.collect_list(col))
+        def frequent_values(col):                
 
-        def count_int_values(col):
-            return F.when(F.count(col.cast(label_int)) == 0, None).otherwise(F.count(col.cast(label_int)))
-
-        def count_int_max_values(col):
-            return F.max(col.cast(label_int))
-
-        def count_real_max_values(col):
-            return F.max(col.cast(label_double))
-
-        def count_date_max_values(col):
-            return F.max(F.to_date(col.cast(label_string)))
-
-        def count_int_min_values(col):
-            return F.min(col.cast(label_int))
-
-        def count_real_min_values(col):
-            return F.min(col.cast(label_double))
-
-        def count_date_min_values(col):
-            return F.min(F.to_date(col.cast(label_string), date_format))
-
-        def calculate_int_mean(col):
-            return F.mean(col.cast(label_int))
-
-        def calculate_real_mean(col):
-            return F.mean(col.cast(label_double))
-
-        def calculate_int_stddev(col):
-            return F.stddev(col.cast(label_int))
-
-        def calculate_real_stddev(col):
-            return F.stddev(col.cast(label_double))
-
-        def count_real_longest(col):
-            return F.when(F.count(col.cast(label_double)) == 0, None).otherwise(F.count(col.cast(label_double)))
-
-        def count_date_values(col):
-            return F.when(F.count(F.to_date(col.cast(label_string), date_format)) == 0, None).otherwise(F.count(F.to_date(col.cast(label_string), date_format)))
-
-        def count_string_values(col):
-            return F.count(col.cast(label_string))
-
-        def calculate_shortest_string(low, max_str):
-            if len(low) < 0:
-                return None
-            else:
-                if isinstance(low[0], str):
-                    set_str = list(set(low))
-                    set_str.sort(key=lambda s: len(s))
-                    return set_str[:5]
+            @F.udf
+            def f1(v):
+                if len(v) > 0:
+                    from collections import Counter
+                    x = [w[0] for w in Counter(v).most_common(5)]
+                    return x
                 else:
                     return None
 
-        def count_string_shortest_values(col):
-            return calculate_shortest_string(F.collect_list(col), F.min(F.length(col)))
+            return f1(F.collect_list(col))
 
-        def string_longest_values(col):
-            return calculate_shortest_string(F.collect_list(col), F.max(F.length(col)))
+        def integer_count(col):                                    
+            x = col.cast('integer')
+            return F.when(F.count(x) == 0, None).otherwise(F.count(x))
 
-        def calculate_string_avg(col):
+        def integer_max_value(col):                                
+            x = col.cast('integer')
+            return F.max(x)
+
+        def integer_min_value(col):                            
+            x = col.cast('integer')
+            return F.min(x)
+
+        def integer_mean(col):                                     
+            x = col.cast('integer')
+            return F.mean(x)
+
+        def integer_stddev(col):                                
+            x = col.cast('integer') 
+            return F.stddev(x)
+
+        def real_count(col):                               
+            x = col.cast('double')
+            return F.when(F.count(x) == 0, None).otherwise(F.count(x))
+
+        def real_max_value(col):                           
+            x = col.cast('double')
+            return F.max(x)
+
+        def real_min_value(col):                           
+            x = col.cast('double')
+            return F.min(x)
+
+        def real_mean(col):                            
+            x = col.cast('double')
+            return F.mean(x)
+
+        def real_stddev(col):                           
+            x = col.cast('double')
+            return F.stddev(x)
+        
+        def date_count(col):                           
+            x = col.cast('string')
+            return F.when(F.count(F.to_date(x, 'MM/dd/yyyy')) == 0, None).otherwise(F.count(F.to_date(x, 'MM/dd/yyyy')))
+        
+        def date_max_value(col):                      
+            x = col.cast('string')
+            return F.max(F.to_date(x, 'MM/dd/yyyy'))
+        
+        def date_min_value(col):                        
+            x = col.cast('string')
+            return F.min(F.to_date(x, 'MM/dd/yyyy'))
+        
+        def string_count(col):                         
+            x = col.cast('string')
+            return F.count(x)
+        
+        def string_shortest_values(col):               
+    
+            @F.udf
+            def f2(l, m):
+                if len(l) > 0:
+                    if isinstance(l[0], str):
+                        x = list(set(l))
+                        x.sort(key = lambda s: len(s))
+                        return x[:5]
+                    else:
+                        return None
+                else:
+                    return None
+
+            return f2(F.collect_list(col), F.min(F.length(col)))
+        
+        def string_longest_values(col):             
+    
+            @F.udf
+            def f2(l, m):
+                if len(l) > 0:
+                    if isinstance(l[0], str):
+                        x = list(set(l))
+                        x.sort(key = lambda s: len(s))
+                        return x[-5:]
+                    else:
+                        return None
+                else:
+                    return None
+
+            return f2(F.collect_list(col), F.max(F.length(col)))
+        
+        def string_average_length(col):             
             return F.avg(F.length(col))
-
-        def calculate_df(df):
-
-            function_list = [count_non_empty_cells, count_empty_cells, count_distint_cells, get_frequent_value_count,
-                             count_int_values, count_int_max_values, count_int_min_values,
-                             calculate_int_mean, calculate_int_stddev, count_real_longest, count_real_max_values,
-                             count_real_min_values, calculate_real_mean, calculate_real_stddev, count_date_values,
-                             count_date_max_values, count_date_min_values, count_string_values,
-                             count_string_shortest_values, string_longest_values, calculate_string_avg]
-
-            columns_df = df.columns_df
-
-            df_schema = {}
-            for curr_type in df.dtypes:
-                df_schema[curr_type[0]] = curr_type[1]
-
-            def apply_functions():
-                resultant_list_functions = []
-                for cols in columns_df:
-                    f_format = f.__name__
-                    format = '{0}_{1}'.format(f_format, cols)
-                    if ('.' in cols):
+        
+        def get_s(df):
+            
+            if df.count() <= 100000:              
+                funs = [number_non_empty_cells, 
+                           number_empty_cells,
+                           number_distinct_values,     
+                           frequent_values,
+                           integer_count,
+                           integer_max_value,
+                           integer_min_value,
+                           integer_mean,
+                           integer_stddev,
+                           real_count,
+                           real_max_value,
+                           real_min_value,
+                           real_mean,
+                           real_stddev,
+                           date_count,
+                           date_max_value,
+                           date_min_value,
+                           string_count,
+                           string_shortest_values,
+                           string_longest_values,
+                           string_average_length]
+            else:
+                funs = [   number_non_empty_cells,    
+                           number_empty_cells,         
+                           number_distinct_values,
+                           integer_count,
+                           integer_max_value,
+                           integer_min_value,
+                           integer_mean,
+                           integer_stddev,
+                           real_count,
+                           real_max_value,
+                           real_min_value,
+                           real_mean,
+                           real_stddev,
+                           date_count,
+                           date_max_value,
+                           date_min_value,
+                           string_count,
+                           string_average_length]
+            
+            columns = df.columns
+            
+            schema = {}
+            for temp in df.dtypes:
+                schema[temp[0]] = temp[1]    
+            
+            def exp():                        
+                t = []
+                for c in columns:
+                    if ('.' in c):
                         continue
                     else:
-                        for f in function_list:
-                            if f_format in function_list:
-                                resultant_list_functions.append(f(F.col(cols)).alias(format))
-                            elif df_schema[cols] == label_string and f_format.split('_')[0] == label_string:
-                                resultant_list_functions.append(f(F.col(cols)).alias(format))
-                return resultant_list_functions
-
-            resultant_df = iter(apply_functions())
-
-            def create_dataframes():
-                df_level1 = spark.createDataFrame([(['Root#'],)], ['Z'])
-                df_level2 = spark.createDataFrame([(['Z'],)], ['Z'])
-                df_level3 = spark.createDataFrame([(['Z'],)], ['Z'])
-                return df_level1,df_level2,df_level3
-
-            def collect_df():
-                final_root_df = root_df.collect()
-                final_df_level1 = df_level_1.collect()
-                final_df_level2 = df_level_2.collect()
-                return final_root_df,final_df_level1,final_df_level2
-
-            freq_values = dict()
-            longest_values = dict()
-            shortest_values = dict()
-            length_tag = "len"
-            if df.count() > max_value:
-                root_df ,df_level_1,df_level_2 = create_dataframes()
-
-                for cols in df.columns_df:
-                    if ('.' in cols):
+                        for f in funs:        
+                            if f.__name__ in ['number_non_empty_cells','number_empty_cells','number_distinct_values','frequent_values','integer_count','integer_max_value','integer_min_value','integer_mean','integer_stddev', 'real_count',
+                            'real_max_value','real_min_value','real_mean','real_stddev', 'date_count','date_max_value',
+                            'date_min_value']:
+                                t.append(f(F.col(c)).alias('{0}_{1}'.format(f.__name__, c)))
+                            elif schema[c] == 'string' and f.__name__.split('_')[0] == 'string': 
+                                t.append(f(F.col(c)).alias('{0}_{1}'.format(f.__name__, c)))
+                return t
+        
+            ex = iter(exp())
+            
+           
+            
+            f_v = {}
+            l_v = {}
+            s_v = {}
+            if df.count() > 100000:                            
+                e = spark.createDataFrame([(['I#'],)], ['a'])   
+                e1 = spark.createDataFrame([(['a'],)], ['a'])
+                e2 = spark.createDataFrame([(['a'],)], ['a'])
+                for c in df.columns:
+                    if ('.' in c):
                         continue
                     else:
-                        root_df = root_df.union(df.groupBy(F.col(cols)).count().sort(F.desc("count")).limit(5).select(F.collect_list(F.col(cols))))
-                        if df_schema[cols] == label_string:
-                            df_level_2 = df_level_2.union(df.withColumn(length_tag, F.length(F.col(cols))).sort(F.desc(length_tag)).select(F.col(cols),length_tag).distinct().limit(5).select(F.collect_list(F.col(cols))))
-                            df_level_1 = df_level_1.union(df.withColumn(length_tag, F.length(F.col(cols))).sort(F.asc(length_tag)).select(F.col(cols), length_tag).distinct().limit(5).select(F.collect_list(F.col(cols))))
+                        e = e.union(df.groupBy(F.col(c)).count().sort(F.desc("count")).limit(5).select(F.collect_list(F.col(c)))) #calculating the frequent values
+                        if schema[c] == 'string':  
+                            e2 = e2.union(df.withColumn("len", F.length(F.col(c))).sort(F.desc("len")).select(F.col(c), 'len').distinct().limit(5).select(F.collect_list(F.col(c)))) #longest values
+                            e1 = e1.union(df.withColumn("len", F.length(F.col(c))).sort(F.asc("len")).select(F.col(c), 'len').distinct().limit(5).select(F.collect_list(F.col(c))))  #shortest values
+                
+                z = e.collect()      
+                z1 = e1.collect()
+                z2 = e2.collect()
+        
+                i = 1
+                j = 1     
+                for c in df.columns:
+                    f_v['{0}_{1}'.format('frequent_values',c)] = z[i][0]
+                    if schema[c] == 'string':
+                        l_v['{0}_{1}'.format('longest_values',c)] = z2[j][0]
+                        s_v['{0}_{1}'.format('shortest_values',c)] = z1[j][0]
+                        j = j + 1
+                    i = i + 1
 
-                final_root_df ,final_df_level1,final_df_level2 = collect_df()
+            
+            return df.agg(*ex).toJSON().first(), f_v, l_v, s_v 
+        
+        def get_l(s, f_v, l_v, s_v):
+            
+            
+            
+            r = json.loads(s)      
+            
+            funs = [number_non_empty_cells,   
+                   number_empty_cells,
+                   number_distinct_values,
+                   frequent_values,
+                   integer_count,
+                   integer_max_value,
+                   integer_min_value,
+                   integer_mean,
+                   integer_stddev,
+                   real_count,
+                   real_max_value,
+                   real_min_value,
+                   real_mean,
+                   real_stddev,
+                   date_count,
+                   date_max_value,
+                   date_min_value,
+                   string_count,
+                   string_shortest_values,
+                   string_longest_values,
+                   string_average_length]
+            
+            main_labels = ['number_non_empty_cells',      
+                             'number_empty_cells', 
+                             'number_distinct_values',
+                             'frequent_values']
+            integer_labels = ['integer_count',
+                            'integer_max_value',
+                            'integer_min_value',
+                            'integer_mean',
+                            'integer_stddev']
+            real_labels = ['real_count',
+                            'real_max_value',
+                            'real_min_value',
+                            'real_mean',
+                            'real_stddev']
+            date_labels = ['date_count',
+                            'date_max_value',
+                            'date_min_value']
+            string_labels = ['string_count',
+                               'string_shortest_values',
+                               'string_longest_values',
+                               'string_average_length']
+            
+            schema = {}
+            for temp in df.dtypes:
+                schema[temp[0]] = temp[1]      
+            
+            l = []
+            for c in df.columns:
+                main = {}
+                integer = {}                   
+                real = {}
+                date = {}
+                string = {}
+                main['column_name'] = c
+                integer['type'] = 'INTEGER (LONG)'
+                real['type'] = 'REAL'
+                date['type'] = 'DATE/TIME'
+                string['type'] = 'TEXT'
+                for f in funs:                #store the results into a dictionary
+                    if '{0}_{1}'.format(f.__name__, c) in r.keys() and f.__name__ in main_labels:
+                        main[f.__name__] = r['{0}_{1}'.format(f.__name__, c)]
+                    elif '{0}_{1}'.format(f.__name__, c) in r.keys() and f.__name__ in integer_labels:
+                        integer[f.__name__[f.__name__.index('_')+1:]] = r['{0}_{1}'.format(f.__name__, c)]
+                    elif '{0}_{1}'.format(f.__name__, c) in r.keys() and f.__name__ in real_labels:
+                        real[f.__name__[f.__name__.index('_')+1:]] = r['{0}_{1}'.format(f.__name__, c)]
+                    elif '{0}_{1}'.format(f.__name__, c) in r.keys() and f.__name__ in date_labels:
+                        date[f.__name__[f.__name__.index('_')+1:]] = r['{0}_{1}'.format(f.__name__, c)]
+                    elif '{0}_{1}'.format(f.__name__, c) in r.keys() and f.__name__ in string_labels:
+                        string[f.__name__[f.__name__.index('_')+1:]] = r['{0}_{1}'.format(f.__name__, c)]
+                if bool(f_v):  #add values of frequent values and longest and shortest values for rows > 100000
+                    main['frequent_values'] = f_v['{0}_{1}'.format('frequent_values',c)]
+                if bool(l_v) and schema[c] == 'string' and '{0}_{1}'.format('longest_values',c) in l_v.keys():
+                    string['longest_values'] = l_v['{0}_{1}'.format('longest_values',c)]
+                if bool(s_v) and schema[c] == 'string' and '{0}_{1}'.format('shortest_values',c) in s_v.keys():
+                    string['shortest_values'] = s_v['{0}_{1}'.format('shortest_values',c)]
 
-                count_1,count_2 = 1
-                for cols in df.columns_df:
-                    freq_values['{0}_{1}'.format('get_frequent_value_count', cols)] = final_root_df[count_1][0]
-                    if df_schema[cols] == label_string:
-                        longest_values['{0}_{1}'.format('longest_values', cols)] = final_df_level2[count_2][0]
-                        shortest_values['{0}_{1}'.format('shortest_values', cols)] = final_df_level1[count_2][0]
-                        count_2 = count_2 + 1
-                    count_1 = count_1 + 1
+                temp = []
+                if 'integer_count_{0}'.format(c) in r.keys():
+                    temp.append(integer)
+                if 'real_count_{0}'.format(c) in r.keys():
+                    temp.append(real)
+                if 'date_count_{0}'.format(c) in r.keys():
+                    temp.append(date)
+                if schema[c] == 'string':
+                    temp.append(string)
+                main['data_types'] = temp
+                l.append(main)
+                
+            return l                               
+        
+        s, f2, f3, f4 = get_s(df)
+        l = get_l(s, f2, f3, f4)
+        
+        return l                              
 
-            return df.agg(*resultant_df).toJSON().first(), freq_values, longest_values, shortest_values
-
-        def format_edit(dict_name,cols):
-            r = json.loads(string_s)
-            dict_name[file_ptr.__name__[file_ptr.__name__.in_resultant_df('_') + 1:]] = r['{0}_{1}'.format(file_ptr.__name__, cols)]
-
-        def formatting_column_names(col_name,cols):
-            return '{0}_{1}'.format('col_name', cols)
-
-
-        def get_l(s, freq_values, longest_values, shortest_values):
-            function_list = [count_non_empty_cells, count_empty_cells, count_distint_cells, get_frequent_value_count,
-                             count_int_values, count_int_max_values, count_int_min_values,
-                             calculate_int_mean, calculate_int_stddev, count_real_longest, count_real_max_values,
-                             count_real_min_values, calculate_real_mean, calculate_real_stddev, count_date_values,
-                             count_date_max_values, count_date_min_values, count_string_values,
-                             count_string_shortest_values, string_longest_values, calculate_string_avg]
-
-            root_tag ,int_tag ,real_tag ,date_tag,string_tag = column_labels_list()
-
-            df_schema = {}
-            for sub_list in df.dtypes:
-                df_schema[sub_list[0]] = sub_list[1]
-
-            string_list = []
-            json_load = json.loads(s)
-            for cols in df.columns_df:
-                main_dict = {}
-                int_dictionary = dict()
-                real_dictionary = dict()
-                date_dictionary = dict()
-                string_dictionary = dict()
-                main_dict['column_name'] = cols
-                int_dictionary['type'] = 'INTEGER (LONG)'
-                real_dictionary['type'] = 'REAL'
-                date_dictionary['type'] = 'DATE/TIME'
-                string_dictionary['type'] = 'TEXT'
-                for functions in function_list:
-                    f_format = functions.__name__
-                    pre_specified_format = '{0}_{1}'.format(f_format, cols)
-                    if pre_specified_format in json_load.keys() and f_format in root_tag:
-                        main_dict[f_format] = json_load[pre_specified_format]
-                    elif pre_specified_format in json_load.keys() and f_format in int_tag:
-                        format_edit(int_dictionary,cols)
-                    elif pre_specified_format in json_load.keys() and f_format in real_tag:
-                        format_edit(real_dictionary,cols)
-                    elif pre_specified_format in json_load.keys() and f_format in date_tag:
-                        format_edit(date_dictionary,cols)
-                    elif pre_specified_format in json_load.keys() and f_format in string_tag:
-                        format_edit(string_dictionary,cols)
-
-                if bool(freq_values):
-                    main_dict['get_frequent_value_count'] = freq_values[formatting_column_names('get_frequent_value_count',cols)]
-                if bool(longest_values) and df_schema[cols] == 'string' and '{0}_{1}'.format('longest_values',cols) in longest_values.keys():
-                    string_dictionary['longest_values'] = longest_values[formatting_column_names('longest_values,cols')]
-                if bool(shortest_values) and df_schema[cols] == 'string' and '{0}_{1}'.format('shortest_values',cols) in shortest_values.keys():
-                    string_dictionary['shortest_values'] = shortest_values[formatting_column_names('shortest_values',cols)]
-
-                sub_list = []
-                if 'count_int_values_{0}'.format(cols) in json_load.keys():
-                    sub_list.append(int_dictionary)
-                if 'count_real_longest_values_{0}'.format(cols) in json_load.keys():
-                    sub_list.append(real_dictionary)
-                if 'count_date_values_{0}'.format(cols) in json_load.keys():
-                    sub_list.append(date_dictionary)
-                if df_schema[cols] == label_string:
-                    sub_list.append(string_dictionary)
-                main_dict['data_types'] = sub_list
-                string_list.append(main_dict)
-
-            return string_list
-
-        string_s, calculate_shortest_strings, file_sub, file_4 = calculate_df(df)
-        string_l = get_l(string_s, calculate_shortest_strings, file_sub, file_4)
-
-        return string_l
-
-    cmd = 'hdfs dfs -ls {}'.format(path_to_folder)
+        
+    
+    
+    # check if the files exists in the path given and infer the name of the files 
+    cmd = 'hdfs dfs -ls {}'.format(path)
     files = subprocess.check_output(cmd, shell=True).decode("utf-8").strip().split('\n')
     files = list(files)
-    files = files[1:]
+    files = files[1:]       
     data_order = {}
-    for file_ptr in files:
-        token = file_ptr.split(' ')
-        data_order[token[-1]] = int(token[-4])
-    data_order_x = sorted(data_order.items(),key=operator.itemgetter(1))
+    for f in files:
+        tk = f.split(' ')
+        data_order[tk[-1]] = int(tk[-4])
+    import operator
+    data_order_x = sorted(data_order.items(), key=operator.itemgetter(1))  #sort the filenames in order of increasing size
     print('files success')
 
+ 
+    dataset = spark.read.format('csv').option("delimiter", "\t").option("header", "false").option("inferschema", "true").csv(str(path + '/' + 'datasets.tsv'))
+    dataset.createOrReplaceTempView("dataset")
+    if dataset:
+        print("dataset success")
+        
 
-    dataframe = spark.read.format('csv').option("delimiter", "\t").option("header", "false").option("inferdf_schema","true").csv(str(path_to_folder + '/' + 'datasets.tsv'))
-    dataframe.createOrReplaceTempView("dataframe")
-    if dataframe:
-        print("dataset loaded successfully!")
+    #s = []
+    name = ''
     i = 1
-    datasets_to_skip = [1144,1597, 1688,1689, 1697, 1717, 1767, 1772, 1787, 1788, 1789,1813,1817,1818,1825,1863]
-    for file_index in data_order_x:
-        if i <= num_datasets_to_compute:
-            filename = file_index[0]
-            find_slash = filename.rfind('/')
+    for ftk in data_order_x:   
+        if i <= n:
+            filename = ftk[0]               
             if filename.endswith(".gz"):
-                if i in datasets_to_skip:
+                
+                if i in (1597, 1688, 1697, 1716, 1766, 1771, 1787, 1788, 1812, 1816, 1817, 1824): #skip some problematic datasets
+                    print('Skipped  Dataset at index ',str(i))
                     i = i + 1
                     continue
-                file_ptr = filename[find_slash:]
-                file_ptr = file_ptr[1:]
-                final_dictionary = dict()
-                df = spark.read.format('csv').option("delimiter", "\t").option("header", "true").option("inferdf_schema", "true").csv(str(filename))
-                dataset_name = spark.sql('select col1 as name from dataset where col0 = "{0}"'.format(str(file_ptr[:file_ptr.in_resultant_df(".")]))).toPandas()["name"][0]
-                print("Dataset", str(file_ptr), "at in_resultant_df ", str(i), ", name: ", str(json.dumps(dataset_name)))
+                
+                
+                f = filename[filename.rfind('/'):]   
+                f = f[1:]
+                t = {}
+                df = spark.read.format('csv').option("delimiter", "\t").option("header", "true").option("inferschema", "true").csv(str(filename))   #read the dataframe
+                
+                name = spark.sql('select _c1 as name from dataset where _c0 = "{0}"'.format(str(f[:f.index(".")]))).toPandas()["name"][0]   #get the name of the dataset
+                print("Dataset", str(f),"at index ",str(i),", name: ",str(json.dumps(name)))
                 print("No of rows: ", str(df.count()))
-                print("No of columns_df: ", str(len(df.columns_df)))
-
-                final_dictionary['dataset_name'] = dataset_name
-
-                final_dictionary['columns_df'] = statistics_root(df)
-                with open('task1.json', 'a') as fp:
-                    json.dump(final_dictionary, fp)
+                print("No of columns: ",str(len(df.columns)))
+                
+                
+                t['dataset_name'] = name        
+#                
+                t['columns'] = stat1(df)           
+                with open('task1.json', 'a') as fp:  
+                    json.dump(t, fp)
+                
+#               #print the time taken to process the dataset
+                
+                print("Completed dataset " + f + ' ' + str(time.time() - start_time))
+                print("Completed {0} of {1}".format(i, n))
+                start_time = time.time()
                 i = i + 1
         else:
             break
 
     return 0
+
+path = str(sys.argv[1])  
+n = int(sys.argv[2])      
+
+
+start_time = time.time()
+generic_profiling(path, start_time, n)   
+print("--- %s seconds ---" % (time.time() - start_time))  
+
+
+spark.stop() 
 
 
 path_to_folder = str(sys.argv[1])
